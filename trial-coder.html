@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Trial Coder</title>
+<style>
+  :root{
+    --ink:#2b2a26;
+    --paper:#faf8f4;
+    --paper2:#f0ece2;
+    --line:#ddd6c8;
+    --accent:#c26b45;
+    --accent-soft:#e9dcc9;
+    --accent2:#3a7d6b;
+    --accent3:#5b6fb0;
+    --used:#c9c3b4;
+    --mono: "SF Mono","IBM Plex Mono",Consolas,monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Inter, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); font-size:15px; line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:#2b2a26; color:var(--paper);
+    padding:14px 20px; display:flex; align-items:baseline; gap:14px;
+    flex-wrap:wrap; position:sticky; top:0; z-index:10;
+  }
+  header h1{font-size:16px; margin:0; letter-spacing:.02em; font-weight:700;}
+  header .tag{font-family:var(--mono); font-size:12px; opacity:.8; color:#f2c9a8;}
+  nav{display:flex; gap:0; margin-left:auto;}
+  nav button{
+    background:none; border:1px solid #55534a; color:var(--paper);
+    padding:6px 14px; font-family:var(--sans); font-size:13px; font-weight:600; cursor:pointer;
+    border-right:none; border-radius:0;
+  }
+  nav button:last-child{border-right:1px solid #55534a;}
+  nav button.active{background:var(--accent); border-color:var(--accent); color:#fff;}
+  main{max-width:1000px; margin:0 auto; padding:20px;}
+  section{display:none;}
+  section.active{display:block;}
+
+  .card{
+    background:#fff; border:1px solid var(--line); border-radius:10px; padding:20px 22px;
+    margin-bottom:16px; box-shadow:0 1px 2px rgba(43,42,38,.04);
+  }
+  .card h2{
+    font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+    margin:0 0 14px; color:var(--accent2); font-weight:700;
+  }
+  label{display:block; font-size:13px; font-weight:600; margin-bottom:5px; color:#5a584f;}
+  input[type=text], select, textarea{
+    width:100%; padding:9px 11px; border:1px solid var(--line); background:var(--paper);
+    border-radius:6px; font-family:var(--sans); font-size:14px; color:var(--ink);
+  }
+  textarea{min-height:90px; resize:vertical; font-family:var(--mono); font-size:13px;}
+  .row{display:flex; gap:14px; flex-wrap:wrap;}
+  .row > div{flex:1; min-width:180px;}
+  button.primary{
+    background:var(--accent); color:#fff; border:none; padding:11px 20px; border-radius:7px;
+    font-family:var(--sans); font-size:14px; font-weight:600; cursor:pointer; letter-spacing:.01em;
+  }
+  button.primary:hover{background:#a85936;}
+  button.ghost{
+    background:#fff; border:1px solid var(--line); padding:9px 16px; border-radius:7px;
+    font-family:var(--sans); font-size:13px; font-weight:600; cursor:pointer; color:#5a584f;
+  }
+  button.ghost:hover{border-color:var(--accent2); color:var(--accent2);}
+  button:disabled{opacity:.35; cursor:not-allowed;}
+
+  .status{
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--sans); font-size:13px; margin-bottom:14px; color:#5a584f;
+  }
+  .status b{color:var(--accent); font-size:22px; font-family:var(--sans); font-weight:800;}
+  .progress{height:6px; background:var(--paper2); margin-bottom:18px; border-radius:3px; overflow:hidden;}
+  .progress div{height:100%; background:linear-gradient(90deg, var(--accent2), var(--accent)); border-radius:3px;}
+
+  .pool{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:18px;}
+  .chip{
+    font-family:var(--sans); font-size:14px; font-weight:600; padding:9px 14px; border-radius:7px;
+    border:1px solid var(--line); background:var(--paper); cursor:pointer;
+    user-select:none; transition:all .12s;
+  }
+  .chip:hover{border-color:var(--accent); background:#fff; transform:translateY(-1px);}
+  .chip.selected{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .chip.used{
+    color:var(--used); text-decoration:line-through; background:none;
+    border-style:dashed; cursor:default; pointer-events:none; transform:none;
+  }
+
+  .cond-toggle{display:flex; gap:8px; margin-bottom:18px;}
+  .cond-toggle button{
+    flex:1; padding:11px; font-family:var(--sans); font-size:13px; font-weight:600; border-radius:7px;
+    border:1px solid var(--line); background:var(--paper); cursor:pointer; color:#5a584f;
+  }
+  .cond-toggle button.selected{background:var(--accent3); color:#fff; border-color:var(--accent3);}
+
+  .answer-row{display:flex; gap:8px; margin-bottom:18px;}
+  .answer-row button{
+    flex:1; padding:16px; font-size:20px; font-weight:800; font-family:var(--sans);
+    border:2px solid var(--line); border-radius:9px; background:var(--paper); cursor:pointer; color:var(--ink);
+  }
+  .answer-row button:hover{border-color:var(--accent); transform:translateY(-1px);}
+  .answer-row button.selected{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .answer-row button[data-ans="1"].selected{background:var(--accent2); border-color:var(--accent2);}
+  .answer-row button[data-ans="2"].selected{background:var(--accent3); border-color:var(--accent3);}
+  .answer-row button[data-ans="3"].selected{background:#a85936; border-color:#a85936;}
+  .answer-row button[data-ans="4"].selected{background:#8a6bb0; border-color:#8a6bb0;}
+  .answer-row button.skip-btn{font-size:12px; font-family:var(--sans); font-weight:700; color:#8a8776;}
+  .answer-row button.skip-btn.selected{background:#8a8776; border-color:#8a8776; color:#fff;}
+
+  .log-btn{width:100%; padding:15px; font-size:15px;}
+
+  table{width:100%; border-collapse:collapse; font-family:var(--sans); font-size:13px;}
+  th, td{text-align:left; padding:8px 10px; border-bottom:1px solid var(--line);}
+  th{text-transform:uppercase; font-size:10.5px; letter-spacing:.06em; color:#8a8776; font-weight:700;}
+  tr:hover td{background:var(--paper);}
+  .del{color:#c26b45; cursor:pointer; font-family:var(--sans); font-weight:600; font-size:12px;}
+
+  .empty{
+    padding:40px 20px; text-align:center; color:#8a8776; font-family:var(--sans); font-size:14px;
+    border:1px dashed var(--line); border-radius:8px;
+  }
+  .footer-actions{display:flex; gap:10px; margin-top:14px; flex-wrap:wrap;}
+  .hint{font-size:12px; color:#8a8776; margin-top:5px; font-family:var(--sans);}
+  .warn{color:var(--accent); font-weight:600;}
+
+  #wordListDetails{cursor:default;}
+  #wordListDetails summary{
+    cursor:pointer; font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+    color:#8a8776; font-weight:700; list-style:none; user-select:none;
+  }
+  #wordListDetails summary::-webkit-details-marker{display:none;}
+  #wordListDetails summary::before{content:"▸ "; color:var(--accent2);}
+  #wordListDetails[open] summary::before{content:"▾ "; color:var(--accent2);}
+  #wordListDetails summary:hover{color:var(--accent2);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Trial Coder</h1>
+  <span class="tag" id="headerTag">no participant loaded</span>
+  <nav>
+    <button data-tab="setup" class="active">Setup</button>
+    <button data-tab="code">Code</button>
+    <button data-tab="data">Data</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- SETUP -->
+  <section id="setup" class="active">
+    <div class="card">
+      <h2>Participant &amp; session</h2>
+      <div class="row">
+        <div>
+          <label>Participant ID</label>
+          <input type="text" id="pidInput" placeholder="e.g. P014">
+        </div>
+        <div>
+          <label>Session</label>
+          <select id="sessionSelect">
+            <option value="immediate">Immediate test (18 trials)</option>
+            <option value="post30">30-min post-test (36 trials)</option>
+            <option value="post7d">7-day post-test (36 trials)</option>
+          </select>
+        </div>
+      </div>
+      <div class="footer-actions">
+        <button class="primary" id="loadBtn">Load / resume session</button>
+      </div>
+      <div class="hint" id="loadHint"></div>
+    </div>
+
+    <details class="card" id="wordListDetails">
+      <summary>Word list settings</summary>
+      <div style="margin-top:14px">
+        <label>18 novel words — loaded, hidden from view here so they stay unseen while you work</label>
+        <textarea id="wordListInput" placeholder="Word list is loaded and hidden. Paste a new list here only if you want to replace it."></textarea>
+        <div class="hint">To replace the list, paste new words here and save — this will overwrite the current one.</div>
+        <div class="footer-actions">
+          <button class="primary" id="saveWordsBtn">Save word list</button>
+          <span class="hint" id="wordCountHint"></span>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <!-- CODE -->
+  <section id="code">
+    <div class="card">
+      <div class="status">
+        <span id="codeSubtitle">—</span>
+        <b id="trialCounter">0 / 0</b>
+      </div>
+      <div class="progress"><div id="progressBar" style="width:0%"></div></div>
+
+      <div id="condBlock" style="display:none">
+        <label>Retention condition</label>
+        <div class="cond-toggle">
+          <button data-cond="item-specific">Item-specific</button>
+          <button data-cond="generalized">Generalized</button>
+        </div>
+      </div>
+
+      <label>Novel word (remaining choices shrink as you code)</label>
+      <div class="pool" id="wordPool"></div>
+
+      <label>Response</label>
+      <div class="answer-row" id="answerRow">
+        <button data-ans="1">1</button>
+        <button data-ans="2">2</button>
+        <button data-ans="3">3</button>
+        <button data-ans="4">4</button>
+        <button data-ans="skipped" class="skip-btn">Skipped</button>
+      </div>
+
+      <button class="primary log-btn" id="logBtn" disabled>Log trial</button>
+      <div class="footer-actions">
+        <button class="ghost" id="undoBtn">Undo last trial</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATA -->
+  <section id="data">
+    <div class="card">
+      <h2>Logged trials — <span id="dataSubtitle">no session loaded</span></h2>
+      <div id="tableWrap"><div class="empty">No trials logged yet.</div></div>
+      <div class="footer-actions">
+        <button class="primary" id="exportBtn">Export CSV</button>
+        <button class="ghost" id="exportAllBtn">Export ALL participants (CSV)</button>
+        <button class="ghost" id="clearBtn">Clear this session's data</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Backup &amp; restore</h2>
+      <div class="hint" style="margin:0 0 12px">
+        Everything here lives in this browser only. Download a full backup regularly — if the browser storage
+        ever gets cleared, you can restore from it and pick up exactly where you left off.
+      </div>
+      <div class="footer-actions">
+        <button class="primary" id="backupBtn">Download full backup (JSON)</button>
+        <button class="ghost" id="restoreBtn">Restore from backup</button>
+        <input type="file" id="restoreInput" accept="application/json" style="display:none">
+      </div>
+      <div class="hint" id="backupHint"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const SESSION_META = {
+  immediate: { label: 'Immediate test', trials: 18, hasCondition: false, code: 1 },
+  post30:    { label: '30-min post-test', trials: 36, hasCondition: true, code: 2 },
+  post7d:    { label: '7-day post-test', trials: 36, hasCondition: true, code: 3 },
+};
+const CONDITIONS = ['item-specific','generalized'];
+
+let state = {
+  pid: null,
+  session: null,
+  wordList: [],
+  entries: [],      // {trial, word, condition, answer, timestamp}
+  selWord: null,
+  selCond: null,
+  selAns: null,
+};
+
+// ---------- storage helpers (browser localStorage — works on any static host) ----------
+const LS_PREFIX = 'trialcoder:';
+async function loadWordList(){
+  try{
+    const raw = localStorage.getItem(LS_PREFIX + 'wordlist');
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+async function saveWordList(list){
+  try{ localStorage.setItem(LS_PREFIX + 'wordlist', JSON.stringify(list)); }
+  catch(e){ alert('Could not save word list — your browser storage may be full or blocked.'); }
+}
+function sessionKey(pid, session){ return LS_PREFIX + `trials:${pid}:${session}`; }
+async function loadEntries(pid, session){
+  try{
+    const raw = localStorage.getItem(sessionKey(pid,session));
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+async function saveEntries(pid, session, entries){
+  try{ localStorage.setItem(sessionKey(pid,session), JSON.stringify(entries)); }
+  catch(e){ alert('Could not save — your browser storage may be full or blocked. Export CSV to be safe.'); }
+}
+async function listAllSessionKeys(){
+  const keys = [];
+  for(let i=0; i<localStorage.length; i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith(LS_PREFIX + 'trials:')) keys.push(k);
+  }
+  return keys;
+}
+
+// ---------- tabs ----------
+document.querySelectorAll('nav button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('main section').forEach(s=>s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab === 'data') renderTable();
+  });
+});
+
+// ---------- setup ----------
+document.getElementById('saveWordsBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('wordListInput').value;
+  const words = raw.split(/[\n,]/).map(w=>w.trim()).filter(Boolean);
+  if(words.length === 0){
+    document.getElementById('wordCountHint').innerHTML = '<span class="warn">Textarea is empty — nothing saved, existing list kept.</span>';
+    return;
+  }
+  await saveWordList(words);
+  state.wordList = words;
+  document.getElementById('wordListInput').value = '';
+  updateWordCountHint();
+});
+
+function updateWordCountHint(){
+  const n = state.wordList.length;
+  const hint = document.getElementById('wordCountHint');
+  if(n === 18){ hint.textContent = `18 words loaded and hidden. Ready to code.`; hint.className='hint'; }
+  else if(n === 0){ hint.innerHTML = '<span class="warn">No word list loaded.</span>'; }
+  else{ hint.innerHTML = `<span class="warn">${n} words loaded (expected 18).</span>`; }
+}
+
+document.getElementById('loadBtn').addEventListener('click', async ()=>{
+  const pid = document.getElementById('pidInput').value.trim();
+  const session = document.getElementById('sessionSelect').value;
+  if(!pid){ document.getElementById('loadHint').innerHTML = '<span class="warn">Enter a participant ID first.</span>'; return; }
+  if(state.wordList.length === 0){ document.getElementById('loadHint').innerHTML = '<span class="warn">Save a word list first.</span>'; return; }
+  state.pid = pid;
+  state.session = session;
+  state.entries = await loadEntries(pid, session);
+  const meta = SESSION_META[session];
+  document.getElementById('loadHint').textContent =
+    `Loaded ${state.entries.length} of ${meta.trials} trials for ${pid} / ${meta.label}.`;
+  document.getElementById('headerTag').textContent = `${pid} — ${meta.label}`;
+  document.getElementById('dataSubtitle').textContent = `${pid} — ${meta.label}`;
+  resetSelection();
+  renderCodeScreen();
+  renderTable();
+  document.querySelector('nav button[data-tab="code"]').click();
+});
+
+// ---------- code screen ----------
+function remainingPool(){
+  const meta = SESSION_META[state.session];
+  if(!meta.hasCondition){
+    const used = new Set(state.entries.map(e=>e.word));
+    return state.wordList.filter(w=>!used.has(w)).map(w=>({word:w, condition:null}));
+  } else {
+    const used = new Set(state.entries.map(e=>e.word+'|'+e.condition));
+    const pool = [];
+    state.wordList.forEach(w=>CONDITIONS.forEach(c=>{
+      if(!used.has(w+'|'+c)) pool.push({word:w, condition:c});
+    }));
+    return pool;
+  }
+}
+
+function resetSelection(){
+  state.selWord = null; state.selCond = null; state.selAns = null;
+}
+
+function renderCodeScreen(){
+  if(!state.session){ return; }
+  const meta = SESSION_META[state.session];
+  const done = state.entries.length;
+  document.getElementById('codeSubtitle').textContent = `${state.pid} — ${meta.label}`;
+  document.getElementById('trialCounter').textContent = `${done} / ${meta.trials}`;
+  document.getElementById('progressBar').style.width = `${(done/meta.trials)*100}%`;
+
+  document.getElementById('condBlock').style.display = meta.hasCondition ? 'block' : 'none';
+  document.querySelectorAll('.cond-toggle button').forEach(b=>{
+    b.classList.toggle('selected', b.dataset.cond === state.selCond);
+  });
+
+  // word pool: if condition-based, filter by selected condition (or show all words with remaining count)
+  const pool = remainingPool();
+  const wordPoolEl = document.getElementById('wordPool');
+  wordPoolEl.innerHTML = '';
+
+  if(meta.hasCondition){
+    // show all 18 words; a word is "used" for the currently selected condition only
+    const remainingForCond = state.selCond ? new Set(pool.filter(p=>p.condition===state.selCond).map(p=>p.word)) : null;
+    state.wordList.forEach(w=>{
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = w;
+      if(!state.selCond){
+        chip.classList.add('used'); // pick condition first
+      } else if(!remainingForCond.has(w)){
+        chip.classList.add('used');
+      } else {
+        if(w === state.selWord) chip.classList.add('selected');
+        chip.addEventListener('click', ()=>{ state.selWord = w; renderCodeScreen(); updateLogBtn(); });
+      }
+      wordPoolEl.appendChild(chip);
+    });
+  } else {
+    const remainingWords = new Set(pool.map(p=>p.word));
+    state.wordList.forEach(w=>{
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      chip.textContent = w;
+      if(!remainingWords.has(w)){
+        chip.classList.add('used');
+      } else {
+        if(w === state.selWord) chip.classList.add('selected');
+        chip.addEventListener('click', ()=>{ state.selWord = w; renderCodeScreen(); updateLogBtn(); });
+      }
+      wordPoolEl.appendChild(chip);
+    });
+  }
+
+  document.querySelectorAll('#answerRow button').forEach(b=>{
+    b.classList.toggle('selected', b.dataset.ans === state.selAns);
+  });
+
+  updateLogBtn();
+
+  if(done >= meta.trials){
+    document.getElementById('wordPool').insertAdjacentHTML('beforeend',
+      '<div class="empty" style="flex-basis:100%">All trials logged for this session.</div>');
+  }
+}
+
+document.querySelectorAll('.cond-toggle button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    state.selCond = b.dataset.cond;
+    state.selWord = null;
+    renderCodeScreen();
+  });
+});
+document.querySelectorAll('#answerRow button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    state.selAns = b.dataset.ans;
+    renderCodeScreen();
+  });
+});
+
+function updateLogBtn(){
+  const meta = SESSION_META[state.session];
+  const ready = state.selWord && state.selAns && (!meta.hasCondition || state.selCond);
+  document.getElementById('logBtn').disabled = !ready;
+}
+
+document.getElementById('logBtn').addEventListener('click', async ()=>{
+  const meta = SESSION_META[state.session];
+  const entry = {
+    trial: state.entries.length + 1,
+    word: state.selWord,
+    condition: meta.hasCondition ? state.selCond : null,
+    answer: state.selAns,
+  };
+  state.entries.push(entry);
+  await saveEntries(state.pid, state.session, state.entries);
+  resetSelection();
+  renderCodeScreen();
+  renderTable();
+});
+
+document.getElementById('undoBtn').addEventListener('click', async ()=>{
+  if(state.entries.length === 0) return;
+  state.entries.pop();
+  await saveEntries(state.pid, state.session, state.entries);
+  resetSelection();
+  renderCodeScreen();
+  renderTable();
+});
+
+// ---------- data table ----------
+function renderTable(){
+  const wrap = document.getElementById('tableWrap');
+  if(!state.session || state.entries.length === 0){
+    wrap.innerHTML = '<div class="empty">No trials logged yet.</div>';
+    return;
+  }
+  const meta = SESSION_META[state.session];
+  let html = '<table><thead><tr><th>Trial</th><th>Word</th>';
+  if(meta.hasCondition) html += '<th>Condition</th>';
+  html += '<th>Answer</th><th></th></tr></thead><tbody>';
+  state.entries.forEach((e,i)=>{
+    html += `<tr><td>${e.trial}</td><td>${e.word}</td>`;
+    if(meta.hasCondition) html += `<td>${e.condition}</td>`;
+    html += `<td>${e.answer}</td>`;
+    html += `<td class="del" data-i="${i}">delete</td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('.del').forEach(el=>{
+    el.addEventListener('click', async ()=>{
+      const i = parseInt(el.dataset.i,10);
+      state.entries.splice(i,1);
+      // renumber trials
+      state.entries.forEach((e,idx)=>e.trial = idx+1);
+      await saveEntries(state.pid, state.session, state.entries);
+      renderCodeScreen();
+      renderTable();
+    });
+  });
+}
+
+function toCSV(rows){
+  const header = ['participant','session_number','trial','novel_word','retention_condition','answer'];
+  const lines = [header.join(',')];
+  rows.forEach(r=>lines.push(r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(',')));
+  return lines.join('\n');
+}
+function downloadCSV(text, filename){
+  const blob = new Blob([text], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(!state.session || state.entries.length===0) return;
+  const rows = state.entries.map(e=>[state.pid, SESSION_META[state.session].code, e.trial, e.word, e.condition, e.answer]);
+  downloadCSV(toCSV(rows), `${state.pid}_${state.session}.csv`);
+});
+
+document.getElementById('exportAllBtn').addEventListener('click', async ()=>{
+  const keys = await listAllSessionKeys();
+  const rows = [];
+  for(const k of keys){
+    const parts = k.split(':'); // ['trialcoder','trials', pid, session]
+    const pid = parts[2], session = parts[3];
+    try{
+      const raw = localStorage.getItem(k);
+      const entries = JSON.parse(raw);
+      entries.forEach(e=>rows.push([pid, SESSION_META[session].code, e.trial, e.word, e.condition, e.answer]));
+    }catch(e){}
+  }
+  if(rows.length===0){ alert('No data found in storage yet.'); return; }
+  downloadCSV(toCSV(rows), `all_participants_trials.csv`);
+});
+
+document.getElementById('backupBtn').addEventListener('click', ()=>{
+  const backup = {};
+  for(let i=0; i<localStorage.length; i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith(LS_PREFIX)) backup[k] = localStorage.getItem(k);
+  }
+  const stamp = new Date().toISOString().slice(0,10);
+  const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `trial-coder-backup_${stamp}.json`; a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('restoreBtn').addEventListener('click', ()=>{
+  document.getElementById('restoreInput').click();
+});
+
+document.getElementById('restoreInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    const keys = Object.keys(backup).filter(k=>k.startsWith(LS_PREFIX));
+    if(keys.length === 0){
+      document.getElementById('backupHint').innerHTML = '<span class="warn">That file doesn\'t look like a Trial Coder backup.</span>';
+      return;
+    }
+    if(!confirm(`Restore ${keys.length} stored item(s) from this backup? This will overwrite any current data with matching participant/session IDs.`)) return;
+    keys.forEach(k => localStorage.setItem(k, backup[k]));
+    document.getElementById('backupHint').textContent = `Restored ${keys.length} item(s). Reload the session in the Code tab to see it.`;
+    state.wordList = await loadWordList();
+    if(state.pid && state.session){
+      state.entries = await loadEntries(state.pid, state.session);
+      renderCodeScreen();
+      renderTable();
+    }
+  }catch(err){
+    document.getElementById('backupHint').innerHTML = '<span class="warn">Could not read that file — make sure it\'s an unmodified backup JSON.</span>';
+  }
+  e.target.value = '';
+});
+
+document.getElementById('clearBtn').addEventListener('click', async ()=>{
+  if(!state.session) return;
+  if(!confirm(`Clear all ${state.entries.length} logged trials for ${state.pid} / ${state.session}? This cannot be undone.`)) return;
+  state.entries = [];
+  await saveEntries(state.pid, state.session, state.entries);
+  resetSelection();
+  renderCodeScreen();
+  renderTable();
+});
+
+// ---------- init ----------
+const DEFAULT_WORDS = ['geag','tope','bosa','zab','dax','wug','jav','manu','terb','larp','twill','vab','modi','dage','pim','koob','blick','poip'];
+
+(async function init(){
+  state.wordList = await loadWordList();
+  if(state.wordList.length === 0){
+    state.wordList = DEFAULT_WORDS;
+    await saveWordList(state.wordList);
+  }
+  updateWordCountHint();
+})();
+</script>
+</body>
+</html>
