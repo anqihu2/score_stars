@@ -90,6 +90,12 @@
     color:var(--used); text-decoration:line-through; background:none;
     border-style:dashed; cursor:default; pointer-events:none; transform:none;
   }
+  .chip.meta-chip{border-style:dashed; color:#8a8776; font-style:italic;}
+  .chip.meta-chip.selected{background:#8a8776; border-color:#8a8776; color:#fff; font-style:normal;}
+  .comp-question{
+    font-size:14px; font-weight:600; color:var(--accent2); margin-bottom:10px;
+    padding:8px 12px; background:var(--accent-soft); border-radius:6px; min-height:1em;
+  }
 
   .cond-toggle{display:flex; gap:8px; margin-bottom:18px;}
   .cond-toggle button{
@@ -111,8 +117,11 @@
   .answer-row button[data-ans="4"].selected{background:#8a6bb0; border-color:#8a6bb0;}
   .answer-row button.skip-btn{font-size:12px; font-family:var(--sans); font-weight:700; color:#8a8776;}
   .answer-row button.skip-btn.selected{background:#8a8776; border-color:#8a8776; color:#fff;}
-  .answer-row button.gorilla-btn{font-size:12px; font-family:var(--sans); font-weight:700; color:#3a7d6b;}
-  .answer-row button.gorilla-btn.selected{background:#3a7d6b; border-color:#3a7d6b; color:#fff;}
+  .answer-row button.dnh-btn{font-size:12px; font-family:var(--sans); font-weight:700; color:#3a7d6b;}
+  .answer-row button.dnh-btn.selected{background:#3a7d6b; border-color:#3a7d6b; color:#fff;}
+
+  #confRow button{font-size:15px; padding:12px;}
+  #confRow button.selected{background:#5b6fb0; border-color:#5b6fb0; color:#fff;}
 
   .log-btn{width:100%; padding:15px; font-size:15px;}
 
@@ -191,6 +200,19 @@
         </div>
       </div>
     </details>
+
+    <details class="card" id="keywordDetails">
+      <summary>Comprehension keyword settings</summary>
+      <div style="margin-top:14px">
+        <label>18 comprehension questions — loaded and hidden. One line per word: <code>word | question | keyword1, keyword2</code></label>
+        <textarea id="keywordListInput" placeholder="dax | What is Luke's dream? | To be a chef&#10;wug | Who was playing with Robbie? | Daddy&#10;..."></textarea>
+        <div class="hint">These are the tappable options that'll show up during coding once you pick that word. Words left out just show a notes field instead.</div>
+        <div class="footer-actions">
+          <button class="primary" id="saveKeywordsBtn">Save keyword list</button>
+          <span class="hint" id="keywordCountHint"></span>
+        </div>
+      </div>
+    </details>
   </section>
 
   <!-- CODE -->
@@ -219,8 +241,28 @@
         <button data-ans="2">2</button>
         <button data-ans="3">3</button>
         <button data-ans="4">4</button>
-        <button data-ans="gorilla" class="gorilla-btn">Gorilla</button>
+        <button data-ans="did-not-hear" class="dnh-btn">Did not hear</button>
         <button data-ans="skipped" class="skip-btn">Skipped</button>
+      </div>
+
+      <div id="extraBlock" style="display:none">
+        <label>Confidence</label>
+        <div class="answer-row" id="confRow">
+          <button data-conf="0">0</button>
+          <button data-conf="25">25</button>
+          <button data-conf="50">50</button>
+          <button data-conf="75">75</button>
+          <button data-conf="100">100</button>
+          <button data-conf="did-not-hear" class="dnh-btn">Did not hear</button>
+          <button data-conf="skipped" class="skip-btn">Skipped</button>
+        </div>
+
+        <label>Comprehension <span style="font-weight:400; color:#8a8776">(optional, tap all that apply)</span></label>
+        <div id="compQuestion" class="comp-question"></div>
+        <div class="pool" id="compKeywordPool"></div>
+
+        <label>Notes <span style="font-weight:400; color:#8a8776">(optional — for anything the keyword list doesn't cover)</span></label>
+        <input type="text" id="notesInput" placeholder="Anything worth flagging about this trial...">
       </div>
 
       <button class="primary log-btn" id="logBtn" disabled>Log trial</button>
@@ -261,20 +303,24 @@
 
 <script>
 const SESSION_META = {
-  immediate: { label: 'Immediate test', trials: 18, hasCondition: false, code: 1 },
-  post30:    { label: '30-min post-test', trials: 36, hasCondition: true, code: 2 },
-  post7d:    { label: '7-day post-test', trials: 36, hasCondition: true, code: 3 },
+  immediate: { label: 'Immediate test', trials: 18, hasCondition: false, hasExtras: true, code: 1 },
+  post30:    { label: '30-min post-test', trials: 36, hasCondition: true, hasExtras: false, code: 2 },
+  post7d:    { label: '7-day post-test', trials: 36, hasCondition: true, hasExtras: false, code: 3 },
 };
 const CONDITIONS = ['item-specific','generalized'];
+const CONFIDENCE_LEVELS = [0,25,50,75,100];
 
 let state = {
   pid: null,
   session: null,
   wordList: [],
-  entries: [],      // {trial, word, condition, answer, timestamp}
+  keywordMap: {},
+  entries: [],      // {trial, word, condition, answer, confidence, comprehension_keywords, notes}
   selWord: null,
   selCond: null,
   selAns: null,
+  selConf: null,
+  selKeywords: [],
 };
 
 // ---------- storage helpers (browser localStorage — works on any static host) ----------
@@ -307,6 +353,17 @@ async function listAllSessionKeys(){
     if(k && k.startsWith(LS_PREFIX + 'trials:')) keys.push(k);
   }
   return keys;
+}
+
+async function loadKeywordMap(){
+  try{
+    const raw = localStorage.getItem(LS_PREFIX + 'keywords');
+    return raw ? JSON.parse(raw) : {};
+  }catch(e){ return {}; }
+}
+async function saveKeywordMap(map){
+  try{ localStorage.setItem(LS_PREFIX + 'keywords', JSON.stringify(map)); }
+  catch(e){ alert('Could not save keyword list — your browser storage may be full or blocked.'); }
 }
 
 // ---------- tabs ----------
@@ -342,6 +399,33 @@ function updateWordCountHint(){
   else{ hint.innerHTML = `<span class="warn">${n} words loaded (expected 18).</span>`; }
 }
 
+document.getElementById('saveKeywordsBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('keywordListInput').value;
+  if(!raw.trim()){
+    document.getElementById('keywordCountHint').innerHTML = '<span class="warn">Textarea is empty — nothing saved, existing list kept.</span>';
+    return;
+  }
+  const map = {};
+  raw.split('\n').forEach(line=>{
+    const parts = line.split('|');
+    if(parts.length < 3) return;
+    const word = parts[0].trim();
+    const question = parts[1].trim();
+    const kws = parts[2].split(',').map(k=>k.trim()).filter(Boolean);
+    if(word) map[word] = { question, keywords: kws };
+  });
+  await saveKeywordMap(map);
+  state.keywordMap = map;
+  document.getElementById('keywordListInput').value = '';
+  updateKeywordCountHint();
+});
+
+function updateKeywordCountHint(){
+  const n = Object.keys(state.keywordMap || {}).length;
+  const hint = document.getElementById('keywordCountHint');
+  hint.textContent = n === 0 ? 'No comprehension questions loaded.' : `${n} comprehension question(s) loaded and hidden.`;
+}
+
 document.getElementById('loadBtn').addEventListener('click', async ()=>{
   const pid = document.getElementById('pidInput').value.trim();
   const session = document.getElementById('sessionSelect').value;
@@ -371,6 +455,8 @@ function maxUsesPerWord(){
 
 function resetSelection(){
   state.selWord = null; state.selCond = null; state.selAns = null;
+  state.selConf = null; state.selKeywords = [];
+  document.getElementById('notesInput').value = '';
 }
 
 function renderCodeScreen(){
@@ -400,7 +486,11 @@ function renderCodeScreen(){
       chip.classList.add('used');
     } else {
       if(w === state.selWord) chip.classList.add('selected');
-      chip.addEventListener('click', ()=>{ state.selWord = w; renderCodeScreen(); updateLogBtn(); });
+      chip.addEventListener('click', ()=>{
+        if(state.selWord !== w){ state.selKeywords = []; }
+        state.selWord = w;
+        renderCodeScreen(); updateLogBtn();
+      });
     }
     wordPoolEl.appendChild(chip);
   });
@@ -408,6 +498,14 @@ function renderCodeScreen(){
   document.querySelectorAll('#answerRow button').forEach(b=>{
     b.classList.toggle('selected', b.dataset.ans === state.selAns);
   });
+
+  document.getElementById('extraBlock').style.display = meta.hasExtras ? 'block' : 'none';
+  if(meta.hasExtras){
+    document.querySelectorAll('#confRow button').forEach(b=>{
+      b.classList.toggle('selected', b.dataset.conf === state.selConf);
+    });
+    renderKeywordChips();
+  }
 
   updateLogBtn();
 
@@ -430,6 +528,54 @@ document.querySelectorAll('#answerRow button').forEach(b=>{
     renderCodeScreen();
   });
 });
+document.querySelectorAll('#confRow button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    state.selConf = (state.selConf === b.dataset.conf) ? null : b.dataset.conf;
+    renderCodeScreen();
+  });
+});
+const COMP_META_OPTIONS = ["don't know", "did not hear", "skipped"];
+
+function renderKeywordChips(){
+  const pool = document.getElementById('compKeywordPool');
+  const qEl = document.getElementById('compQuestion');
+  pool.innerHTML = '';
+  if(!state.selWord){
+    qEl.textContent = '';
+    pool.innerHTML = '<div class="hint">Pick a word above to see its comprehension question.</div>';
+    return;
+  }
+  const entry = state.keywordMap[state.selWord];
+  const kws = entry ? entry.keywords : [];
+  qEl.textContent = entry && entry.question ? entry.question : '';
+  if(kws.length === 0){
+    pool.insertAdjacentHTML('beforeend', '<div class="hint" style="flex-basis:100%">No keyword list saved for this word — use the options below or the notes field.</div>');
+  }
+  kws.forEach(kw=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.textContent = kw;
+    if(state.selKeywords.includes(kw)) chip.classList.add('selected');
+    chip.addEventListener('click', ()=>{
+      const i = state.selKeywords.indexOf(kw);
+      if(i === -1) state.selKeywords.push(kw); else state.selKeywords.splice(i,1);
+      renderKeywordChips();
+    });
+    pool.appendChild(chip);
+  });
+  COMP_META_OPTIONS.forEach(opt=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip meta-chip';
+    chip.textContent = opt;
+    if(state.selKeywords.includes(opt)) chip.classList.add('selected');
+    chip.addEventListener('click', ()=>{
+      const i = state.selKeywords.indexOf(opt);
+      if(i === -1) state.selKeywords.push(opt); else state.selKeywords.splice(i,1);
+      renderKeywordChips();
+    });
+    pool.appendChild(chip);
+  });
+}
 
 function updateLogBtn(){
   const ready = state.selWord && state.selAns;
@@ -443,6 +589,9 @@ document.getElementById('logBtn').addEventListener('click', async ()=>{
     word: state.selWord,
     condition: meta.hasCondition ? state.selCond : null,
     answer: state.selAns,
+    confidence: meta.hasExtras ? state.selConf : null,
+    comprehension_keywords: meta.hasExtras ? state.selKeywords.join('; ') : null,
+    notes: meta.hasExtras ? document.getElementById('notesInput').value.trim() : null,
   };
   state.entries.push(entry);
   await saveEntries(state.pid, state.session, state.entries);
@@ -470,11 +619,14 @@ function renderTable(){
   const meta = SESSION_META[state.session];
   let html = '<table><thead><tr><th>Trial</th><th>Word</th>';
   if(meta.hasCondition) html += '<th>Condition</th>';
-  html += '<th>Answer</th><th></th></tr></thead><tbody>';
+  html += '<th>Answer</th>';
+  if(meta.hasExtras) html += '<th>Conf.</th><th>Keywords</th><th>Notes</th>';
+  html += '<th></th></tr></thead><tbody>';
   state.entries.forEach((e,i)=>{
     html += `<tr><td>${e.trial}</td><td>${e.word}</td>`;
-    if(meta.hasCondition) html += `<td>${e.condition}</td>`;
+    if(meta.hasCondition) html += `<td>${e.condition ?? ''}</td>`;
     html += `<td>${e.answer}</td>`;
+    if(meta.hasExtras) html += `<td>${e.confidence ?? ''}</td><td>${e.comprehension_keywords ?? ''}</td><td>${e.notes ?? ''}</td>`;
     html += `<td class="del" data-i="${i}">delete</td></tr>`;
   });
   html += '</tbody></table>';
@@ -493,7 +645,7 @@ function renderTable(){
 }
 
 function toCSV(rows){
-  const header = ['participant','session_number','trial','novel_word','retention_condition','answer'];
+  const header = ['participant','session_number','trial','novel_word','retention_condition','answer','confidence','comprehension_keywords','notes'];
   const lines = [header.join(',')];
   rows.forEach(r=>lines.push(r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(',')));
   return lines.join('\n');
@@ -508,7 +660,7 @@ function downloadCSV(text, filename){
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   if(!state.session || state.entries.length===0) return;
-  const rows = state.entries.map(e=>[state.pid, SESSION_META[state.session].code, e.trial, e.word, e.condition, e.answer]);
+  const rows = state.entries.map(e=>[state.pid, SESSION_META[state.session].code, e.trial, e.word, e.condition, e.answer, e.confidence, e.comprehension_keywords, e.notes]);
   downloadCSV(toCSV(rows), `${state.pid}_${state.session}.csv`);
 });
 
@@ -521,7 +673,7 @@ document.getElementById('exportAllBtn').addEventListener('click', async ()=>{
     try{
       const raw = localStorage.getItem(k);
       const entries = JSON.parse(raw);
-      entries.forEach(e=>rows.push([pid, SESSION_META[session].code, e.trial, e.word, e.condition, e.answer]));
+      entries.forEach(e=>rows.push([pid, SESSION_META[session].code, e.trial, e.word, e.condition, e.answer, e.confidence, e.comprehension_keywords, e.notes]));
     }catch(e){}
   }
   if(rows.length===0){ alert('No data found in storage yet.'); return; }
@@ -585,13 +737,40 @@ document.getElementById('clearBtn').addEventListener('click', async ()=>{
 // ---------- init ----------
 const DEFAULT_WORDS = ['geag','tope','bosa','zab','dax','wug','jav','manu','terb','larp','twill','vab','modi','dage','pim','koob','blick','poip'];
 
+const DEFAULT_KEYWORD_MAP = {
+  bosa:  { question: "Who helped Shirley get ready?", keywords: ["Her mom"] },
+  terb:  { question: "Who showed up on Mark's birthday?", keywords: ["Mark's friends", "His friends"] },
+  dage:  { question: "What type of ball was thrown into John's room?", keywords: ["Baseball"] },
+  vab:   { question: "Who did David want to draw?", keywords: ["Mr. Smith", "His teacher", "His best friend"] },
+  poip:  { question: "Where did Billy go after gym?", keywords: ["The cafeteria"] },
+  manu:  { question: "Where did Cathy go on her field trip?", keywords: ["A dairy farm", "Farm"] },
+  koob:  { question: "What fruit did Alex eat?", keywords: ["Apple"] },
+  zab:   { question: "What did Emily, Rufus, and their friends do together?", keywords: ["Sled"] },
+  geag:  { question: "Where did Zoey's family go on vacation?", keywords: ["The ocean", "The beach", "The coast"] },
+  pim:   { question: "How many clowns were performing?", keywords: ["Two"] },
+  jav:   { question: "How did Nina get home at the end?", keywords: ["Walking"] },
+  tope:  { question: "Where did Olivia go?", keywords: ["Aquarium"] },
+  blick: { question: "When does grandpa plant the seeds?", keywords: ["March", "Spring"] },
+  dax:   { question: "What is Luke's dream?", keywords: ["To be a chef"] },
+  modi:  { question: "How many bananas did Mike use to make the fruit salad?", keywords: ["Three"] },
+  wug:   { question: "Who was playing the game with Robbie?", keywords: ["Daddy"] },
+  larp:  { question: "Who was teaching Leo to play soccer?", keywords: ["The new coach", "The coach"] },
+  twill: { question: "Who was waiting for Jack outside?", keywords: ["Mom"] },
+};
+
 (async function init(){
   state.wordList = await loadWordList();
   if(state.wordList.length === 0){
     state.wordList = DEFAULT_WORDS;
     await saveWordList(state.wordList);
   }
+  state.keywordMap = await loadKeywordMap();
+  if(Object.keys(state.keywordMap).length === 0){
+    state.keywordMap = DEFAULT_KEYWORD_MAP;
+    await saveKeywordMap(state.keywordMap);
+  }
   updateWordCountHint();
+  updateKeywordCountHint();
 })();
 </script>
 </body>
