@@ -203,7 +203,7 @@
       <div id="condBlock" style="display:none">
         <label>Retention condition</label>
         <div class="cond-toggle">
-          <button data-cond="item-specific">Item-specific</button>
+          <button data-cond="item_specific">item_specific</button>
           <button data-cond="generalized">Generalized</button>
         </div>
       </div>
@@ -262,7 +262,7 @@ const SESSION_META = {
   post30:    { label: '30-min post-test', trials: 36, hasCondition: true, code: 2 },
   post7d:    { label: '7-day post-test', trials: 36, hasCondition: true, code: 3 },
 };
-const CONDITIONS = ['item-specific','generalized'];
+const CONDITIONS = ['item_specific','generalized'];
 
 let state = {
   pid: null,
