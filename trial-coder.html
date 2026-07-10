@@ -96,6 +96,9 @@
     font-size:14px; font-weight:600; color:var(--accent2); margin-bottom:10px;
     padding:8px 12px; background:var(--accent-soft); border-radius:6px; min-height:1em;
   }
+  .score-badge{font-size:13px; font-weight:700; margin-top:8px; min-height:1.2em;}
+  .score-badge.score-1{color:var(--accent2);}
+  .score-badge.score-0{color:#a85936;}
 
   .cond-toggle{display:flex; gap:8px; margin-bottom:18px;}
   .cond-toggle button{
@@ -260,6 +263,7 @@
         <label>Comprehension <span style="font-weight:400; color:#8a8776">(optional, tap all that apply)</span></label>
         <div id="compQuestion" class="comp-question"></div>
         <div class="pool" id="compKeywordPool"></div>
+        <div id="compScoreBadge" class="score-badge"></div>
 
         <label>Notes <span style="font-weight:400; color:#8a8776">(optional — for anything the keyword list doesn't cover)</span></label>
         <input type="text" id="notesInput" placeholder="Anything worth flagging about this trial...">
@@ -536,6 +540,11 @@ document.querySelectorAll('#confRow button').forEach(b=>{
 });
 const COMP_META_OPTIONS = ["don't know", "did not hear", "skipped"];
 
+function comprehensionScore(){
+  if(state.selKeywords.length === 0) return null; // nothing selected yet — no score to assign
+  return state.selKeywords.some(k => !COMP_META_OPTIONS.includes(k)) ? 1 : 0;
+}
+
 function renderKeywordChips(){
   const pool = document.getElementById('compKeywordPool');
   const qEl = document.getElementById('compQuestion');
@@ -575,6 +584,17 @@ function renderKeywordChips(){
     });
     pool.appendChild(chip);
   });
+  const score = comprehensionScore();
+  const badge = document.getElementById('compScoreBadge');
+  if(score === null){
+    badge.textContent = '';
+  } else if(score === 1){
+    badge.textContent = '✓ Scored 1 (correct — real keyword hit)';
+    badge.className = 'score-badge score-1';
+  } else {
+    badge.textContent = '✗ Scored 0 (no real keyword hit)';
+    badge.className = 'score-badge score-0';
+  }
 }
 
 function updateLogBtn(){
@@ -591,6 +611,7 @@ document.getElementById('logBtn').addEventListener('click', async ()=>{
     answer: state.selAns,
     confidence: meta.hasExtras ? state.selConf : null,
     comprehension_keywords: meta.hasExtras ? state.selKeywords.join('; ') : null,
+    comprehension_correct: meta.hasExtras ? comprehensionScore() : null,
     notes: meta.hasExtras ? document.getElementById('notesInput').value.trim() : null,
   };
   state.entries.push(entry);
@@ -620,13 +641,13 @@ function renderTable(){
   let html = '<table><thead><tr><th>Trial</th><th>Word</th>';
   if(meta.hasCondition) html += '<th>Condition</th>';
   html += '<th>Answer</th>';
-  if(meta.hasExtras) html += '<th>Conf.</th><th>Keywords</th><th>Notes</th>';
+  if(meta.hasExtras) html += '<th>Conf.</th><th>Keywords</th><th>Score</th><th>Notes</th>';
   html += '<th></th></tr></thead><tbody>';
   state.entries.forEach((e,i)=>{
     html += `<tr><td>${e.trial}</td><td>${e.word}</td>`;
     if(meta.hasCondition) html += `<td>${e.condition ?? ''}</td>`;
     html += `<td>${e.answer}</td>`;
-    if(meta.hasExtras) html += `<td>${e.confidence ?? ''}</td><td>${e.comprehension_keywords ?? ''}</td><td>${e.notes ?? ''}</td>`;
+    if(meta.hasExtras) html += `<td>${e.confidence ?? ''}</td><td>${e.comprehension_keywords ?? ''}</td><td>${e.comprehension_correct ?? ''}</td><td>${e.notes ?? ''}</td>`;
     html += `<td class="del" data-i="${i}">delete</td></tr>`;
   });
   html += '</tbody></table>';
@@ -645,7 +666,7 @@ function renderTable(){
 }
 
 function toCSV(rows){
-  const header = ['participant','session_number','trial','novel_word','retention_condition','answer','confidence','comprehension_keywords','notes'];
+  const header = ['participant','session_number','trial','novel_word','retention_condition','answer','confidence','comprehension_keywords','comprehension_correct','notes'];
   const lines = [header.join(',')];
   rows.forEach(r=>lines.push(r.map(v=>`"${(v??'').toString().replace(/"/g,'""')}"`).join(',')));
   return lines.join('\n');
@@ -660,7 +681,7 @@ function downloadCSV(text, filename){
 
 document.getElementById('exportBtn').addEventListener('click', ()=>{
   if(!state.session || state.entries.length===0) return;
-  const rows = state.entries.map(e=>[state.pid, SESSION_META[state.session].code, e.trial, e.word, e.condition, e.answer, e.confidence, e.comprehension_keywords, e.notes]);
+  const rows = state.entries.map(e=>[state.pid, SESSION_META[state.session].code, e.trial, e.word, e.condition, e.answer, e.confidence, e.comprehension_keywords, e.comprehension_correct, e.notes]);
   downloadCSV(toCSV(rows), `${state.pid}_${state.session}.csv`);
 });
 
@@ -673,7 +694,7 @@ document.getElementById('exportAllBtn').addEventListener('click', async ()=>{
     try{
       const raw = localStorage.getItem(k);
       const entries = JSON.parse(raw);
-      entries.forEach(e=>rows.push([pid, SESSION_META[session].code, e.trial, e.word, e.condition, e.answer, e.confidence, e.comprehension_keywords, e.notes]));
+      entries.forEach(e=>rows.push([pid, SESSION_META[session].code, e.trial, e.word, e.condition, e.answer, e.confidence, e.comprehension_keywords, e.comprehension_correct, e.notes]));
     }catch(e){}
   }
   if(rows.length===0){ alert('No data found in storage yet.'); return; }
