@@ -201,7 +201,7 @@
       <div class="progress"><div id="progressBar" style="width:0%"></div></div>
 
       <div id="condBlock" style="display:none">
-        <label>Retention condition</label>
+        <label>Retention condition <span style="font-weight:400; color:#8a8776">(optional — click again to deselect)</span></label>
         <div class="cond-toggle">
           <button data-cond="item_specific">item_specific</button>
           <button data-cond="generalized">Generalized</button>
@@ -359,19 +359,11 @@ document.getElementById('loadBtn').addEventListener('click', async ()=>{
 });
 
 // ---------- code screen ----------
-function remainingPool(){
-  const meta = SESSION_META[state.session];
-  if(!meta.hasCondition){
-    const used = new Set(state.entries.map(e=>e.word));
-    return state.wordList.filter(w=>!used.has(w)).map(w=>({word:w, condition:null}));
-  } else {
-    const used = new Set(state.entries.map(e=>e.word+'|'+e.condition));
-    const pool = [];
-    state.wordList.forEach(w=>CONDITIONS.forEach(c=>{
-      if(!used.has(w+'|'+c)) pool.push({word:w, condition:c});
-    }));
-    return pool;
-  }
+function wordUseCount(word){
+  return state.entries.filter(e=>e.word===word).length;
+}
+function maxUsesPerWord(){
+  return SESSION_META[state.session].hasCondition ? 2 : 1;
 }
 
 function resetSelection(){
@@ -391,43 +383,24 @@ function renderCodeScreen(){
     b.classList.toggle('selected', b.dataset.cond === state.selCond);
   });
 
-  // word pool: if condition-based, filter by selected condition (or show all words with remaining count)
-  const pool = remainingPool();
+  // word pool: a word is available as long as it hasn't hit its max uses yet.
+  // Condition (if applicable) is optional metadata, not a gate on word availability.
+  const maxUses = maxUsesPerWord();
   const wordPoolEl = document.getElementById('wordPool');
   wordPoolEl.innerHTML = '';
-
-  if(meta.hasCondition){
-    // show all 18 words; a word is "used" for the currently selected condition only
-    const remainingForCond = state.selCond ? new Set(pool.filter(p=>p.condition===state.selCond).map(p=>p.word)) : null;
-    state.wordList.forEach(w=>{
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.textContent = w;
-      if(!state.selCond){
-        chip.classList.add('used'); // pick condition first
-      } else if(!remainingForCond.has(w)){
-        chip.classList.add('used');
-      } else {
-        if(w === state.selWord) chip.classList.add('selected');
-        chip.addEventListener('click', ()=>{ state.selWord = w; renderCodeScreen(); updateLogBtn(); });
-      }
-      wordPoolEl.appendChild(chip);
-    });
-  } else {
-    const remainingWords = new Set(pool.map(p=>p.word));
-    state.wordList.forEach(w=>{
-      const chip = document.createElement('div');
-      chip.className = 'chip';
-      chip.textContent = w;
-      if(!remainingWords.has(w)){
-        chip.classList.add('used');
-      } else {
-        if(w === state.selWord) chip.classList.add('selected');
-        chip.addEventListener('click', ()=>{ state.selWord = w; renderCodeScreen(); updateLogBtn(); });
-      }
-      wordPoolEl.appendChild(chip);
-    });
-  }
+  state.wordList.forEach(w=>{
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    const used = wordUseCount(w);
+    chip.textContent = meta.hasCondition && used > 0 ? `${w} (${used}/${maxUses})` : w;
+    if(used >= maxUses){
+      chip.classList.add('used');
+    } else {
+      if(w === state.selWord) chip.classList.add('selected');
+      chip.addEventListener('click', ()=>{ state.selWord = w; renderCodeScreen(); updateLogBtn(); });
+    }
+    wordPoolEl.appendChild(chip);
+  });
 
   document.querySelectorAll('#answerRow button').forEach(b=>{
     b.classList.toggle('selected', b.dataset.ans === state.selAns);
@@ -443,8 +416,8 @@ function renderCodeScreen(){
 
 document.querySelectorAll('.cond-toggle button').forEach(b=>{
   b.addEventListener('click', ()=>{
-    state.selCond = b.dataset.cond;
-    state.selWord = null;
+    // click again to deselect — condition is optional
+    state.selCond = (state.selCond === b.dataset.cond) ? null : b.dataset.cond;
     renderCodeScreen();
   });
 });
@@ -456,8 +429,7 @@ document.querySelectorAll('#answerRow button').forEach(b=>{
 });
 
 function updateLogBtn(){
-  const meta = SESSION_META[state.session];
-  const ready = state.selWord && state.selAns && (!meta.hasCondition || state.selCond);
+  const ready = state.selWord && state.selAns;
   document.getElementById('logBtn').disabled = !ready;
 }
 
