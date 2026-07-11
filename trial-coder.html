@@ -90,6 +90,8 @@
     color:var(--used); text-decoration:line-through; background:none;
     border-style:dashed; cursor:default; pointer-events:none; transform:none;
   }
+  .chip.at-max-editable{border-color:#c26b45; border-style:dashed; color:#a85936;}
+  .chip.at-max-editable.selected{background:#a85936; border-color:#a85936; color:#fff;}
   .chip.meta-chip{border-style:dashed; color:#8a8776; font-style:italic;}
   .chip.meta-chip.selected{background:#8a8776; border-color:#8a8776; color:#fff; font-style:normal;}
   .comp-question{
@@ -99,6 +101,10 @@
   .score-badge{font-size:13px; font-weight:700; margin-top:8px; min-height:1.2em;}
   .score-badge.score-1{color:var(--accent2);}
   .score-badge.score-0{color:#a85936;}
+  .editing-banner{
+    background:#fbe9d0; color:#8a5a1f; font-weight:700; font-size:13px;
+    padding:9px 12px; border-radius:6px; margin-bottom:14px;
+  }
 
   .cond-toggle{display:flex; gap:8px; margin-bottom:18px;}
   .cond-toggle button{
@@ -133,6 +139,7 @@
   th{text-transform:uppercase; font-size:10.5px; letter-spacing:.06em; color:#8a8776; font-weight:700;}
   tr:hover td{background:var(--paper);}
   .del{color:#c26b45; cursor:pointer; font-family:var(--sans); font-weight:600; font-size:12px;}
+  .edit-link{color:var(--accent3); cursor:pointer; font-family:var(--sans); font-weight:600; font-size:12px;}
 
   .empty{
     padding:40px 20px; text-align:center; color:#8a8776; font-family:var(--sans); font-size:14px;
@@ -269,9 +276,12 @@
         <input type="text" id="notesInput" placeholder="Anything worth flagging about this trial...">
       </div>
 
+      <div id="editingBanner" class="editing-banner" style="display:none"></div>
+
       <button class="primary log-btn" id="logBtn" disabled>Log trial</button>
       <div class="footer-actions">
         <button class="ghost" id="undoBtn">Undo last trial</button>
+        <button class="ghost" id="cancelEditBtn" style="display:none">Cancel edit</button>
       </div>
     </div>
   </section>
@@ -325,6 +335,7 @@ let state = {
   selAns: null,
   selConf: null,
   selKeywords: [],
+  editingIndex: null,
 };
 
 // ---------- storage helpers (browser localStorage — works on any static host) ----------
@@ -451,7 +462,7 @@ document.getElementById('loadBtn').addEventListener('click', async ()=>{
 
 // ---------- code screen ----------
 function wordUseCount(word){
-  return state.entries.filter(e=>e.word===word).length;
+  return state.entries.filter((e,i)=>e.word===word && i !== state.editingIndex).length;
 }
 function maxUsesPerWord(){
   return SESSION_META[state.session].hasCondition ? 2 : 1;
@@ -478,7 +489,10 @@ function renderCodeScreen(){
 
   // word pool: a word is available as long as it hasn't hit its max uses yet.
   // Condition (if applicable) is optional metadata, not a gate on word availability.
+  // When editing an existing trial, every word stays clickable — you may be correcting
+  // a mix-up between two trials, so we warn (not block) on words already at/over their max.
   const maxUses = maxUsesPerWord();
+  const isEditing = state.editingIndex !== null;
   const wordPoolEl = document.getElementById('wordPool');
   wordPoolEl.innerHTML = '';
   state.wordList.forEach(w=>{
@@ -486,9 +500,11 @@ function renderCodeScreen(){
     chip.className = 'chip';
     const used = wordUseCount(w);
     chip.textContent = meta.hasCondition && used > 0 ? `${w} (${used}/${maxUses})` : w;
-    if(used >= maxUses){
+    const atMax = used >= maxUses;
+    if(atMax && !isEditing){
       chip.classList.add('used');
     } else {
+      if(atMax && isEditing) chip.classList.add('at-max-editable');
       if(w === state.selWord) chip.classList.add('selected');
       chip.addEventListener('click', ()=>{
         if(state.selWord !== w){ state.selKeywords = []; }
@@ -513,7 +529,21 @@ function renderCodeScreen(){
 
   updateLogBtn();
 
-  if(done >= meta.trials){
+  const banner = document.getElementById('editingBanner');
+  const cancelBtn = document.getElementById('cancelEditBtn');
+  const logBtn = document.getElementById('logBtn');
+  if(state.editingIndex !== null){
+    banner.style.display = 'block';
+    banner.textContent = `Editing trial ${state.entries[state.editingIndex].trial} — make your changes, then Save.`;
+    cancelBtn.style.display = 'inline-block';
+    logBtn.textContent = 'Save changes';
+  } else {
+    banner.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    logBtn.textContent = 'Log trial';
+  }
+
+  if(done >= meta.trials && state.editingIndex === null){
     document.getElementById('wordPool').insertAdjacentHTML('beforeend',
       '<div class="empty" style="flex-basis:100%">All trials logged for this session.</div>');
   }
@@ -604,8 +634,7 @@ function updateLogBtn(){
 
 document.getElementById('logBtn').addEventListener('click', async ()=>{
   const meta = SESSION_META[state.session];
-  const entry = {
-    trial: state.entries.length + 1,
+  const fields = {
     word: state.selWord,
     condition: meta.hasCondition ? state.selCond : null,
     answer: state.selAns,
@@ -614,11 +643,23 @@ document.getElementById('logBtn').addEventListener('click', async ()=>{
     comprehension_correct: meta.hasExtras ? comprehensionScore() : null,
     notes: meta.hasExtras ? document.getElementById('notesInput').value.trim() : null,
   };
-  state.entries.push(entry);
+  if(state.editingIndex !== null){
+    const trialNum = state.entries[state.editingIndex].trial;
+    state.entries[state.editingIndex] = { trial: trialNum, ...fields };
+    state.editingIndex = null;
+  } else {
+    state.entries.push({ trial: state.entries.length + 1, ...fields });
+  }
   await saveEntries(state.pid, state.session, state.entries);
   resetSelection();
   renderCodeScreen();
   renderTable();
+});
+
+document.getElementById('cancelEditBtn').addEventListener('click', ()=>{
+  state.editingIndex = null;
+  resetSelection();
+  renderCodeScreen();
 });
 
 document.getElementById('undoBtn').addEventListener('click', async ()=>{
@@ -648,13 +689,20 @@ function renderTable(){
     if(meta.hasCondition) html += `<td>${e.condition ?? ''}</td>`;
     html += `<td>${e.answer}</td>`;
     if(meta.hasExtras) html += `<td>${e.confidence ?? ''}</td><td>${e.comprehension_keywords ?? ''}</td><td>${e.comprehension_correct ?? ''}</td><td>${e.notes ?? ''}</td>`;
-    html += `<td class="del" data-i="${i}">delete</td></tr>`;
+    html += `<td class="edit-link" data-i="${i}">edit</td><td class="del" data-i="${i}">delete</td></tr>`;
   });
   html += '</tbody></table>';
   wrap.innerHTML = html;
+  wrap.querySelectorAll('.edit-link').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const i = parseInt(el.dataset.i,10);
+      startEditTrial(i);
+    });
+  });
   wrap.querySelectorAll('.del').forEach(el=>{
     el.addEventListener('click', async ()=>{
       const i = parseInt(el.dataset.i,10);
+      if(state.editingIndex === i) state.editingIndex = null;
       state.entries.splice(i,1);
       // renumber trials
       state.entries.forEach((e,idx)=>e.trial = idx+1);
@@ -663,6 +711,19 @@ function renderTable(){
       renderTable();
     });
   });
+}
+
+function startEditTrial(i){
+  const e = state.entries[i];
+  state.editingIndex = i;
+  state.selWord = e.word;
+  state.selCond = e.condition || null;
+  state.selAns = e.answer;
+  state.selConf = e.confidence || null;
+  state.selKeywords = e.comprehension_keywords ? e.comprehension_keywords.split('; ').filter(Boolean) : [];
+  renderCodeScreen();
+  document.getElementById('notesInput').value = e.notes || '';
+  document.querySelector('nav button[data-tab="code"]').click();
 }
 
 function toCSV(rows){
